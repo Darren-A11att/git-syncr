@@ -1,0 +1,11 @@
+src/
+bin/
+launchd/
+Makefile
+tsconfig.json
+tsup.config.ts
+*.md
+!README.md
+.git
+.gitignore
+node_modules

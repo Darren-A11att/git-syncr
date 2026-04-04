@@ -1,0 +1,50 @@
+{
+  "name": "git-syncr",
+  "version": "1.0.0",
+  "description": "Automatically sync all git repos in a directory with their remotes",
+  "type": "module",
+  "bin": {
+    "git-syncr": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsx src/index.ts",
+    "postinstall": "node -e \"console.log('\\n  Run \\x1b[1mgit-syncr\\x1b[0m to complete setup.\\n');\""
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "git",
+    "sync",
+    "repository",
+    "auto-sync",
+    "launchd",
+    "systemd"
+  ],
+  "author": "Darren Allatt",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Darren-A11att/git-sync.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Darren-A11att/git-sync/issues"
+  },
+  "homepage": "https://github.com/Darren-A11att/git-sync#readme",
+  "dependencies": {
+    "@inquirer/core": "^11.1.7",
+    "@inquirer/prompts": "^8.3.2",
+    "picocolors": "^1.1.1",
+    "simple-git": "^3.33.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsup": "^8.5.1",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
+}

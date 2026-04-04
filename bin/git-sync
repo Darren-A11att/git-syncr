@@ -1,0 +1,230 @@
+#!/bin/bash
+#
+# git-sync — Pull remote changes for all git repos in a directory
+#
+# Usage: git-sync [--verbose] [--dry-run] [--help]
+
+set -uo pipefail
+
+# --- Defaults ---
+GIT_SYNC_DIR="${GIT_SYNC_DIR:-$HOME/Development}"
+GIT_SYNC_LOG_DIR="${GIT_SYNC_LOG_DIR:-$HOME/Library/Logs/git-sync}"
+GIT_SYNC_NOTIFY="${GIT_SYNC_NOTIFY:-1}"
+
+VERBOSE=0
+DRY_RUN=0
+LOG_FILE="$GIT_SYNC_LOG_DIR/git-sync.log"
+LOCK_FILE="$GIT_SYNC_LOG_DIR/.git-sync.lock"
+
+# Git timeout settings
+export GIT_HTTP_LOW_SPEED_LIMIT=1000
+export GIT_HTTP_LOW_SPEED_TIME=15
+
+# --- Functions ---
+
+usage() {
+    cat <<EOF
+Usage: git-sync [OPTIONS]
+
+Scan a directory for git repos and pull remote changes.
+
+Options:
+  --verbose   Print output to stdout in addition to log file
+  --dry-run   Fetch and compare but do not pull
+  --help      Show this help message
+
+Environment variables:
+  GIT_SYNC_DIR       Directory to scan (default: ~/Development)
+  GIT_SYNC_LOG_DIR   Log directory (default: ~/Library/Logs/git-sync)
+  GIT_SYNC_NOTIFY    macOS notifications: 1=on, 0=off (default: 1)
+EOF
+    exit 0
+}
+
+log() {
+    echo "$1" >> "$LOG_FILE"
+    if [[ "$VERBOSE" -eq 1 ]]; then
+        echo "$1"
+    fi
+}
+
+notify() {
+    if [[ "$GIT_SYNC_NOTIFY" -eq 1 ]]; then
+        osascript -e "display notification \"$2\" with title \"git-sync\" subtitle \"$1\"" 2>/dev/null || true
+    fi
+}
+
+acquire_lock() {
+    if [[ -f "$LOCK_FILE" ]]; then
+        local pid
+        pid=$(cat "$LOCK_FILE" 2>/dev/null)
+        if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
+            log "Another git-sync is running (PID $pid). Exiting."
+            notify "Already running" "Another git-sync is running (PID $pid)"
+            exit 0
+        fi
+        # Stale lock file — previous run crashed
+        rm -f "$LOCK_FILE"
+    fi
+    echo $$ > "$LOCK_FILE"
+}
+
+release_lock() {
+    rm -f "$LOCK_FILE"
+}
+
+# --- Parse arguments ---
+
+for arg in "$@"; do
+    case "$arg" in
+        --verbose) VERBOSE=1 ;;
+        --dry-run) DRY_RUN=1 ;;
+        --help)    usage ;;
+        *)
+            echo "Unknown option: $arg" >&2
+            usage
+            ;;
+    esac
+done
+
+# --- Setup ---
+
+mkdir -p "$GIT_SYNC_LOG_DIR"
+acquire_lock
+trap release_lock EXIT
+
+TIMESTAMP=$(date '+%Y-%m-%dT%H:%M:%S%z')
+
+log "========================================"
+log "git-sync run: $TIMESTAMP"
+if [[ "$DRY_RUN" -eq 1 ]]; then
+    log "MODE: dry-run (no pulls)"
+fi
+log "========================================"
+
+# --- Network check ---
+
+if ! curl -s --max-time 10 --head https://github.com &>/dev/null; then
+    log "No network connectivity. Aborting."
+    notify "No network" "Could not reach github.com"
+    log "========================================"
+    exit 0
+fi
+
+# --- Discover repos ---
+
+synced=0
+unchanged=0
+skipped=0
+errored=0
+
+while IFS= read -r gitdir; do
+    repo_path=$(dirname "$gitdir")
+    repo_name=$(basename "$repo_path")
+
+    # Process each repo in a subshell to avoid cd contamination
+    result=$(
+        cd "$repo_path" || { echo "ERROR|$repo_name|could not cd into repo"; exit 0; }
+
+        # Check for dirty working tree
+        if [[ -n $(git status --porcelain 2>/dev/null) ]]; then
+            echo "SKIPPED|$repo_name|dirty working tree"
+            exit 0
+        fi
+
+        # Get current branch
+        branch=$(git symbolic-ref --short HEAD 2>/dev/null)
+        if [[ -z "$branch" ]]; then
+            echo "SKIPPED|$repo_name|detached HEAD"
+            exit 0
+        fi
+
+        # Get upstream tracking branch
+        upstream=$(git rev-parse --abbrev-ref "@{upstream}" 2>/dev/null)
+        if [[ -z "$upstream" ]]; then
+            echo "SKIPPED|$repo_name ($branch)|no tracking branch"
+            exit 0
+        fi
+
+        # Fetch from remote
+        remote_name="${upstream%%/*}"
+        fetch_output=$(git fetch "$remote_name" 2>&1)
+        if [[ $? -ne 0 ]]; then
+            echo "ERROR|$repo_name ($branch)|fetch failed: $fetch_output"
+            exit 0
+        fi
+
+        # Compare local vs remote
+        local_sha=$(git rev-parse HEAD)
+        remote_sha=$(git rev-parse "$upstream" 2>/dev/null)
+        if [[ "$local_sha" == "$remote_sha" ]]; then
+            echo "UNCHANGED|$repo_name ($branch)"
+            exit 0
+        fi
+
+        # Pull (or dry-run)
+        short_local="${local_sha:0:7}"
+        short_remote="${remote_sha:0:7}"
+
+        if [[ "$DRY_RUN" -eq 1 ]]; then
+            echo "WOULD_SYNC|$repo_name ($branch)|$short_local..$short_remote"
+            exit 0
+        fi
+
+        pull_output=$(git pull --ff-only 2>&1)
+        if [[ $? -ne 0 ]]; then
+            echo "ERROR|$repo_name ($branch)|ff-only failed: $pull_output"
+            exit 0
+        fi
+
+        echo "SYNCED|$repo_name ($branch)|$short_local..$short_remote"
+    )
+
+    # Parse result
+    IFS='|' read -r status name detail <<< "$result"
+
+    case "$status" in
+        SYNCED)
+            log "[SYNCED]    $name $detail"
+            ((synced++))
+            ;;
+        WOULD_SYNC)
+            log "[WOULD_SYNC] $name $detail"
+            ((synced++))
+            ;;
+        UNCHANGED)
+            log "[UNCHANGED] $name"
+            ((unchanged++))
+            ;;
+        SKIPPED)
+            log "[SKIPPED]   $name -- $detail"
+            ((skipped++))
+            ;;
+        ERROR)
+            log "[ERROR]     $name -- $detail"
+            ((errored++))
+            ;;
+    esac
+
+done < <(find "$GIT_SYNC_DIR" -maxdepth 2 -name ".git" -type d 2>/dev/null | sort)
+
+# --- Summary ---
+
+total=$((synced + unchanged + skipped + errored))
+
+log "----------------------------------------"
+if [[ "$DRY_RUN" -eq 1 ]]; then
+    log "Summary: $synced would sync, $unchanged unchanged, $skipped skipped, $errored errored ($total total)"
+else
+    log "Summary: $synced synced, $unchanged unchanged, $skipped skipped, $errored errored ($total total)"
+fi
+log "========================================"
+
+# macOS notification
+if [[ "$DRY_RUN" -eq 1 ]]; then
+    notify "$total repos checked" "$synced would sync, $unchanged unchanged, $skipped skipped, $errored errored"
+else
+    notify "$total repos processed" "$synced synced, $unchanged unchanged, $skipped skipped, $errored errored"
+fi
+
+exit 0

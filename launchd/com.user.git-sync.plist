@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.user.git-sync</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>__PREFIX__/bin/git-sync</string>
+    </array>
+
+    <key>StartInterval</key>
+    <integer>86400</integer>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>GIT_SYNC_DIR</key>
+        <string>__SYNC_DIR__</string>
+        <key>GIT_SYNC_LOG_DIR</key>
+        <string>__HOME__/Library/Logs/git-sync</string>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+        <key>HOME</key>
+        <string>__HOME__</string>
+    </dict>
+
+    <key>StandardOutPath</key>
+    <string>__HOME__/Library/Logs/git-sync/launchd-stdout.log</string>
+    <key>StandardErrorPath</key>
+    <string>__HOME__/Library/Logs/git-sync/launchd-stderr.log</string>
+
+    <key>RunAtLoad</key>
+    <false/>
+
+    <key>Nice</key>
+    <integer>10</integer>
+</dict>
+</plist>
