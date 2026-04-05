@@ -4,7 +4,7 @@
   "description": "Automatically sync all git repos in a directory with their remotes",
   "type": "module",
   "bin": {
-    "git-syncr": "./dist/index.js"
+    "git-syncr": "dist/index.js"
   },
   "scripts": {
     "build": "tsup",
@@ -29,12 +29,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Darren-A11att/git-sync.git"
+    "url": "git+https://github.com/Darren-A11att/git-syncr.git"
   },
   "bugs": {
-    "url": "https://github.com/Darren-A11att/git-sync/issues"
+    "url": "https://github.com/Darren-A11att/git-syncr/issues"
   },
-  "homepage": "https://github.com/Darren-A11att/git-sync#readme",
+  "homepage": "https://github.com/Darren-A11att/git-syncr#readme",
   "dependencies": {
     "@inquirer/core": "^11.1.7",
     "@inquirer/prompts": "^8.3.2",
