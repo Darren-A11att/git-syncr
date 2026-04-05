@@ -6,6 +6,7 @@ tsconfig.json
 tsup.config.ts
 *.md
 !README.md
+!CHANGELOG.md
 .git
 .gitignore
 node_modules
